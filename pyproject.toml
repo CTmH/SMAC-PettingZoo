@@ -36,7 +36,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["smac_pettingzoo"]
+include = ["smac_pettingzoo*"]
 
 [project.urls]
 Homepage = "https://github.com/your-repo/smac_pettingzoo"
