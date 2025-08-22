@@ -34,9 +34,8 @@ dev = [
     "mypy",
 ]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["*"]
+[tool.setuptools]
+packages = ["smac_pettingzoo"]
 
 [project.urls]
 Homepage = "https://github.com/your-repo/smac_pettingzoo"
