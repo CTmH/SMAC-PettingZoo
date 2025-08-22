@@ -164,6 +164,17 @@ wheels = [
 ]
 
 [[package]]
+name = "co-mas"
+version = "1.0.0"
+source = { git = "https://github.com/xihuai18/Common-Multi-agent-Environments.git#64e4b3461285d5025bcfee4a86929f66e2969bea" }
+dependencies = [
+    { name = "gymnasium" },
+    { name = "loguru" },
+    { name = "pettingzoo" },
+    { name = "pre-commit" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -1051,6 +1062,7 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "absl-py" },
+    { name = "co-mas" },
     { name = "gymnasium" },
     { name = "loguru" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1077,6 +1089,7 @@ dev = [
 requires-dist = [
     { name = "absl-py", specifier = ">=0.1.0" },
     { name = "black", marker = "extra == 'dev'" },
+    { name = "co-mas", git = "https://github.com/xihuai18/Common-Multi-agent-Environments.git" },
     { name = "flake8", marker = "extra == 'dev'" },
     { name = "gymnasium" },
     { name = "loguru" },

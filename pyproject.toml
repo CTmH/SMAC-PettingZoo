@@ -23,6 +23,7 @@ dependencies = [
     "pysc2 @ git+https://github.com/xihuai18/pysc2.git",
     "smac @ git+https://github.com/oxwhirl/smac.git",
     "smacv2 @ git+https://github.com/oxwhirl/smacv2.git",
+    "co_mas @ git+https://github.com/xihuai18/Common-Multi-agent-Environments.git",
 ]
 
 [project.optional-dependencies]
