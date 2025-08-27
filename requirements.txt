@@ -1,2 +1,0 @@
-git+https://github.com/xihuai18/Common-Multi-agent-Environments.git
-loguru
