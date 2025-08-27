@@ -11,7 +11,7 @@ from warnings import warn
 
 import gymnasium.spaces as gspaces
 import numpy as np
-from absl import logging
+from absl import logging, flags
 from pysc2 import maps, run_configs
 from pysc2.lib import protocol
 from pysc2.lib.units import Protoss, Terran, Zerg
@@ -391,6 +391,8 @@ class SMACv2EnvCore:
 
     def _launch(self):
         """Launch the StarCraft II game."""
+        if not flags.FLAGS.is_parsed(): # Avoid access flag before flags were parsed in pysc2.
+            flags.FLAGS(['smacv2'])  # Provide program name
         self._run_config = run_configs.get(version=self.game_version)
         _map = maps.get(self.map_name)
         self._seed += 1
