@@ -110,6 +110,33 @@ class AllTeamsDistribution(Distribution):
 register_distribution("all_teams", AllTeamsDistribution)
 
 
+class FixedTeamsDistribution(Distribution):
+    """Generate fixed ally/enemy compositions from unit-name/count mappings."""
+
+    def __init__(self, config, rng):
+        self.env_key = config["env_key"]
+        self.teams = {}
+        for key, size_key in (("ally_team", "n_units"), ("enemy_team", "n_enemies")):
+            counts = config[key]
+            if not isinstance(counts, dict) or not counts:
+                raise ValueError(f"{key} must be a nonempty unit/count mapping")
+            if any(type(count) is not int or count < 0 for count in counts.values()):
+                raise ValueError(f"{key} counts must be nonnegative integers")
+            if sum(counts.values()) != config[size_key]:
+                raise ValueError(f"{key} counts must sum to {size_key}")
+            self.teams[key] = [unit for unit, count in counts.items() for _ in range(count)]
+
+    def generate(self):
+        return {self.env_key: {**{key: team.copy() for key, team in self.teams.items()}, "id": 0}}
+
+    @property
+    def n_tasks(self):
+        return 1
+
+
+register_distribution("fixed_teams", FixedTeamsDistribution)
+
+
 class WeightedTeamsDistribution(Distribution):
     def __init__(self, config, rng):
         self.config = config

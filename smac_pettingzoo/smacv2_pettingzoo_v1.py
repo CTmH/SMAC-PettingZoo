@@ -1,4 +1,5 @@
 import re
+from copy import deepcopy
 from collections import defaultdict
 from typing import Any, Dict, List, Tuple, Type
 
@@ -54,9 +55,9 @@ class ParallelEnv(co_mas.env.ParallelEnv):
             and capability_config.get("n_enemies", _n_enemies) == _n_enemies
         ), "num of units should be consistent"
         if capability_config is not None:
-            _capability_config = _capability_config | capability_config
+            _capability_config = self._merge_capability_config(_capability_config, capability_config)
 
-        self._env = SMACv2Env(f"10gen_{_map_type}", capability_config=_capability_config, **smacv2_env_args)
+        self._env = SMACv2Env(f"10gen_{_map_type}", capability_config=_capability_config, smacv2_env_args=smacv2_env_args)
         # NOTE: To obtain agent infos, should be reset again.
         self._env.reset(0)
         self._init_agents()
@@ -94,6 +95,29 @@ class ParallelEnv(co_mas.env.ParallelEnv):
             return map_type, n_agents, n_enemies
         else:
             return None
+
+    @staticmethod
+    def _merge_capability_config(defaults: Dict, overrides: Dict) -> Dict:
+        # Keep omitted blocks. For the same (or omitted) dist_type, override
+        # direct fields only: nested dictionaries and lists are replaced whole.
+        # A different dist_type replaces the entire block, so parameters from
+        # the old distribution cannot leak into the new one. New distributions
+        # must supply their required fields; their constructors validate them.
+        result = deepcopy(defaults)
+        for key, value in deepcopy(overrides).items():
+            default = result.get(key)
+            if (
+                isinstance(default, dict)
+                and "dist_type" in default
+                and isinstance(value, dict)
+                and value.get("dist_type", default["dist_type"]) == default["dist_type"]
+            ):
+                result[key] = default | value
+            else:
+                result[key] = value
+        # Distribution initialization mutates configs; never share nested
+        # objects with either the caller's overrides or the defaults.
+        return result
 
     @staticmethod
     def _parse_capability_config(map_type: str, n_agents: int, n_enemies: int):

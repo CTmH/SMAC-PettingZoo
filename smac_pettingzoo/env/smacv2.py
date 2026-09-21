@@ -169,6 +169,7 @@ class SMACv2EnvCore:
         heuristic_ai=False,
         heuristic_rest=False,
         debug=False,
+        episode_limit=None,
     ):
         """
         Create a StarCraftC2Env environment.
@@ -180,6 +181,9 @@ class SMACv2EnvCore:
             can be found by running bin/map_list.
         capability_config: Dict
             This describes what units are generated and in what positions. The presence of keys in this config tells SMACv2 that a certain environment component is generated or not.
+        episode_limit: int or None
+            Positive maximum number of environment steps. None uses the map default.
+            A time limit truncates surviving agents rather than terminating them.
         """
         # Map arguments
         self.map_name = map_name
@@ -194,7 +198,9 @@ class SMACv2EnvCore:
 
         map_params = get_map_params(self.map_name)
         self.map_params = map_params
-        self.episode_limit = map_params["limit"]
+        if episode_limit is not None and (type(episode_limit) is not int or episode_limit <= 0):
+            raise ValueError("episode_limit must be a positive integer")
+        self.episode_limit = map_params["limit"] if episode_limit is None else episode_limit
         self._move_amount = move_amount
         self._step_mul = step_mul
         self._kill_unit_step_mul = kill_unit_step_mul
@@ -705,7 +711,6 @@ class SMACv2EnvCore:
 
         elif self._episode_steps >= self.episode_limit:
             # Episode limit reached
-            termination = True
             truncation = True
             self.battles_game += 1
             self.timeouts += 1
@@ -731,7 +736,7 @@ class SMACv2EnvCore:
         if self.debug:
             logging.debug(f"Reward = {reward}".center(60, "-"))
 
-        if termination:
+        if termination or truncation:
             self._episode_count += 1
 
         if self.reward_scale:
