@@ -467,6 +467,7 @@ class SMACv2EnvCore:
         """Reset the environment. Required after each full episode.
         Returns initial observations and states.
         """
+        self.reward = 0.0
         if seed is None:
             seed = np.random.randint(0, 1000000)
         self.seed(seed)
@@ -590,6 +591,7 @@ class SMACv2EnvCore:
 
     def step(self, actions: List[int]):
         """A single environment step. Returns observation, state, reward, dones, infos, avaiable_actions."""
+        self.reward = 0.0
         termination = False
         truncation = False
         infos = [{} for _ in range(self.n_agents)]
@@ -742,6 +744,7 @@ class SMACv2EnvCore:
         if self.reward_scale:
             reward /= self.max_reward / self.reward_scale_rate
 
+        self.reward = reward  # Latest step reward for the upstream renderer's HUD.
         rewards = [reward] * self.n_agents
 
         # if self.use_state_agent:
@@ -2288,6 +2291,7 @@ class SMACv2EnvCore:
             self.renderer = None
         if self._sc2_proc:
             self._sc2_proc.close()
+            self._sc2_proc = None
 
     def seed(self, seed: int):
         """Returns the random seed used by the environment."""
@@ -2297,7 +2301,7 @@ class SMACv2EnvCore:
 
     def render(self, mode="human"):
         if self.renderer is None:
-            from smacv2.env.starcraft2.render import StarCraft2Renderer
+            from smac_pettingzoo.env.render import StarCraft2Renderer
 
             self.renderer = StarCraft2Renderer(self, mode)
         assert mode == self.renderer.mode, "mode must be consistent across render calls"

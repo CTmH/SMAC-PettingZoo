@@ -1,4 +1,5 @@
 import re
+import warnings
 from copy import deepcopy
 from collections import defaultdict
 from typing import Any, Dict, List, Tuple, Type
@@ -17,7 +18,7 @@ class ParallelEnv(co_mas.env.ParallelEnv):
     Parallel Apis of SMACv2
     """
 
-    metadata = {}
+    metadata = {"render_modes": ["human", "rgb_array"]}
 
     def __init__(
         self,
@@ -25,6 +26,7 @@ class ParallelEnv(co_mas.env.ParallelEnv):
         map_units: Tuple[int, int] = None,
         capability_config: Dict = None,
         smacv2_env_args: Dict = {},
+        render_mode: str | None = None,
     ):
         """
         Parameters
@@ -33,6 +35,10 @@ class ParallelEnv(co_mas.env.ParallelEnv):
             Name of the map, should follow the SMACv2 map naming convention, e.g., 10gen_terran_10_vs_10.
             if `map_name` can be parsed, `map_type`, `map_units` and `capability_config` are optional.
         """
+        if render_mode not in (None, "human", "rgb_array"):
+            raise ValueError(f"Unsupported render_mode: {render_mode!r}")
+        self.render_mode = render_mode
+        self._render_warning_issued = False
         assert self._parse_map_name(map_name) is not None or map_name in [
             "10gen_terran",
             "10gen_zerg",
@@ -256,9 +262,21 @@ class ParallelEnv(co_mas.env.ParallelEnv):
 
         return observations, rewards, terminations, truncations, infos
 
+    def render(self):
+        """Render the current frame without advancing the simulation."""
+        if self.render_mode is None:
+            if not self._render_warning_issued:
+                warnings.warn("Set render_mode='human' or 'rgb_array' when creating the environment.", stacklevel=2)
+                self._render_warning_issued = True
+            return None
+        if self.states is None:
+            raise RuntimeError("Call reset() before render().")
+        return self._env.render(mode=self.render_mode)
+
     def close(self):
         if hasattr(self, "_env") and self._env is not None:
             self._env.close()
+        self.states = None
 
 
 def parallel_env(
@@ -268,8 +286,9 @@ def parallel_env(
     smacv2_env_args: dict = {},
     order_forcing: bool = True,
     additional_wrappers: List[Type[pettingzoo.utils.BaseParallelWrapper]] = [],
+    render_mode: str | None = None,
 ) -> ParallelEnv:
-    env = ParallelEnv(map_name, map_units, capability_config, smacv2_env_args)
+    env = ParallelEnv(map_name, map_units, capability_config, smacv2_env_args, render_mode=render_mode)
 
     from co_mas.wrappers import OrderForcingParallelEnvWrapper
 
