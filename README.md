@@ -47,6 +47,21 @@ and returns `None`. Closing the viewer does not terminate the battle.
 Use one human viewer per process and a separate evaluation environment rather
 than enabling windows in every training worker.
 
+### Selecting a larger SMACv2 map
+
+Pass `smacv2_env_args={"map_file": "SMAC_Maps/32x32_flat.SC2Map", "episode_limit": 400}`
+to select a physical map relative to `StarCraftII/Maps` (absolute paths also
+work). Omit `map_file` to retain the scenario's registered map. The scenario
+name, e.g. `10gen_terran_50_vs_50`, still determines the race and team sizes;
+`map_file` does not change those rules or automatically resize spawn regions.
+Set the `start_positions` distribution to match the map's playable area and
+use `fixed_teams` when unit composition must remain constant across episodes.
+The chosen map must include SMACv2's nine custom RL units and episode-control
+triggers, and support two players. Missing custom units are rejected before
+spawning. This check does not validate triggers or spawn coordinates.
+The ordinary `Melee/Flat64.SC2Map` is **not** compatible: it needs a separate
+SMACv2 adaptation, and its playable 64x64 region starts at (12, 10), not (0, 0).
+
 ```python
 from co_mas.test import sample_action
 from smac_pettingzoo import smacv2_pettingzoo_v1, smacv1_pettingzoo_v1

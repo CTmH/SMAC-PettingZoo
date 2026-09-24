@@ -170,6 +170,7 @@ class SMACv2EnvCore:
         heuristic_rest=False,
         debug=False,
         episode_limit=None,
+        map_file: str | None = None,
     ):
         """
         Create a StarCraftC2Env environment.
@@ -184,9 +185,19 @@ class SMACv2EnvCore:
         episode_limit: int or None
             Positive maximum number of environment steps. None uses the map default.
             A time limit truncates surviving agents rather than terminating them.
+        map_file: str or None
+            Optional .SC2Map path, relative to StarCraftII/Maps or absolute.
+            Overrides only the physical map, not race, team sizes or scenario
+            rules. Position distributions must match the chosen playable area.
         """
         # Map arguments
         self.map_name = map_name
+        if map_file is not None and (
+            not isinstance(map_file, str) or not map_file.strip()
+            or not map_file.lower().endswith(".sc2map")
+        ):
+            raise ValueError("map_file must be a nonempty .SC2Map path or None")
+        self.map_file = map_file
         self.capability_config = capability_config
 
         # Obs and State Construction
@@ -400,7 +411,10 @@ class SMACv2EnvCore:
         if not flags.FLAGS.is_parsed(): # Avoid access flag before flags were parsed in pysc2.
             flags.FLAGS(['smacv2'])  # Provide program name
         self._run_config = run_configs.get(version=self.game_version)
-        _map = maps.get(self.map_name)
+        map_path = self.map_file if self.map_file is not None else maps.get(self.map_name).path
+        # Resolve before starting SC2: invalid paths must not leak a game process.
+        # Keep map_name unchanged because unit/race logic uses the scenario name.
+        map_data = self._run_config.map_data(map_path)
         self._seed += 1
 
         # Setting up the interface
@@ -411,8 +425,8 @@ class SMACv2EnvCore:
         # Request to create the game
         create = sc_pb.RequestCreateGame(
             local_map=sc_pb.LocalMap(
-                map_path=_map.path,
-                map_data=self._run_config.map_data(_map.path),
+                map_path=map_path,
+                map_data=map_data,
             ),
             realtime=False,
             random_seed=self._seed,
@@ -427,6 +441,23 @@ class SMACv2EnvCore:
 
         join = sc_pb.RequestJoinGame(race=races[self._agent_race], options=interface_options)
         self._controller.join_game(join)
+
+        if self.map_file is not None:
+            # Unit IDs below rely on these nine custom types occupying the tail.
+            # Ordinary melee maps lack them and can hang during unit creation.
+            unit_types = self._controller.data().units
+            expected = (
+                "Baneling_RL", "Colosus_RL", "Hydralisk_RL", "Marauder_RL",
+                "Marine_RL", "Medivac_RL", "Stalker_RL", "Zealot_RL", "Zergling_RL",
+            )
+            actual = tuple(unit_types.get(i) for i in range(len(unit_types) - 9, len(unit_types)))
+            if actual != expected:
+                self._sc2_proc.close()
+                self._sc2_proc = None
+                raise ValueError(
+                    f"Map {map_path!r} lacks the required SMACv2 custom unit layout. "
+                    "Use a SMACv2-compatible map, not an ordinary melee map."
+                )
 
         game_info = self._controller.game_info()
         map_info = game_info.start_raw
