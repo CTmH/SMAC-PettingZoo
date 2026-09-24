@@ -469,18 +469,15 @@ class SMACv2EnvCore:
         self.map_y = map_info.map_size.y
 
         if map_info.pathing_grid.bits_per_pixel == 1:
-            vals = np.array(list(map_info.pathing_grid.data)).reshape(self.map_x, int(self.map_y / 8))
-            self.pathing_grid = np.transpose(
-                np.array(
-                    [[(b >> i) & 1 for b in row for i in range(7, -1, -1)] for row in vals],
-                    dtype=bool,
-                )
-            )
+            # SC2 serializes rows (y, x); movement lookup uses grid[x, y].
+            # Unpack before reshaping: a row need not occupy whole bytes.
+            vals = np.unpackbits(np.frombuffer(map_info.pathing_grid.data, dtype=np.uint8))
+            self.pathing_grid = vals[: self.map_x * self.map_y].reshape(self.map_y, self.map_x).T.astype(bool)
         else:
             self.pathing_grid = np.invert(
                 np.flip(
                     np.transpose(
-                        np.array(list(map_info.pathing_grid.data), dtype=bool).reshape(self.map_x, self.map_y)
+                        np.array(list(map_info.pathing_grid.data), dtype=bool).reshape(self.map_y, self.map_x)
                     ),
                     axis=1,
                 )
@@ -488,7 +485,7 @@ class SMACv2EnvCore:
 
         self.terrain_height = (
             np.flip(
-                np.transpose(np.array(list(map_info.terrain_height.data)).reshape(self.map_x, self.map_y)),
+                np.transpose(np.array(list(map_info.terrain_height.data)).reshape(self.map_y, self.map_x)),
                 1,
             )
             / 255
