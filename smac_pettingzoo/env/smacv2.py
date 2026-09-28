@@ -1,9 +1,7 @@
 import atexit
 import enum
 import math
-import os
 import random
-from contextlib import contextmanager
 from copy import deepcopy
 from operator import attrgetter
 from typing import Dict, List
@@ -59,6 +57,10 @@ class Direction(enum.IntEnum):
 
 
 EPS = 1e-7
+
+
+class SC2EpisodeInterrupted(protocol.ProtocolError):
+    """The current episode cannot be used after losing the SC2 connection."""
 
 
 class SMACv2Env:
@@ -503,38 +505,10 @@ class SMACv2EnvCore:
         if episode_config is None:
             episode_config = {}
 
-        @contextmanager
-        def suppress_output():
-            # Open os.devnull
-            devnull = os.open(os.devnull, os.O_WRONLY)
-
-            # Save the current file descriptors for stdout and stderr
-            old_stdout_fd = os.dup(1)
-            old_stderr_fd = os.dup(2)
-
-            try:
-                # Redirect file descriptors 1 (stdout) and 2 (stderr) to os.devnull
-                os.dup2(devnull, 1)
-                os.dup2(devnull, 2)
-
-                yield
-            finally:
-                # Restore the original file descriptors
-                os.dup2(old_stdout_fd, 1)
-                os.dup2(old_stderr_fd, 2)
-
-                # Close the file descriptors
-                os.close(devnull)
-                os.close(old_stdout_fd)
-                os.close(old_stderr_fd)
-
-        # Use the context manager to suppress output
-        with suppress_output():
-            if self._episode_count == 0:
-                # Launch StarCraft II
-                self._launch()
-            else:
-                self._restart()
+        if self._sc2_proc is None:
+            self._launch()
+        else:
+            self._restart()
 
         # Information kept for counting the reward
         self.agent_attack_probabilities = episode_config.get("attack", {}).get("item", None)
@@ -563,11 +537,8 @@ class SMACv2EnvCore:
         if self.heuristic_ai:
             self.heuristic_targets = [None] * self.n_agents
 
-        try:
-            self._obs = self._controller.observe()
-            self.init_units(ally_team, enemy_team, episode_config=episode_config)
-        except (protocol.ProtocolError, protocol.ConnectionError):
-            self.full_restart()
+        self._obs = self._controller.observe()
+        self.init_units(ally_team, enemy_team, episode_config=episode_config)
 
         available_actions = []
         for i in range(self.n_agents):
@@ -659,42 +630,10 @@ class SMACv2EnvCore:
                 self._controller.step(self._kill_unit_step_mul)
             # Observe here so that we know if the episode is over.
             self._obs = self._controller.observe()
-        except (protocol.ProtocolError, protocol.ConnectionError):
-            self.full_restart()
-            termination = True
-            available_actions = []
-            for i in range(self.n_agents):
-                available_actions.append(self.get_avail_agent_actions(i))
-                infos[i] = {
-                    "battles_won": self.battles_won,
-                    "battles_game": self.battles_game,
-                    "battles_draw": self.timeouts,
-                    "restarts": self.force_restarts,
-                    "truncation": truncation,
-                    "won": self.win_counted,
-                }
-                if termination:
-                    dones[i] = True
-                else:
-                    if self.death_tracker_ally[i]:
-                        dones[i] = True
-                    else:
-                        dones[i] = False
-            global_state = [self.get_global_state(agent_id) for agent_id in range(self.n_agents)]
-
-            local_obs = self.get_obs()
-
-            if self.use_stacked_frames:
-                self.stacked_local_obs = np.roll(self.stacked_local_obs, 1, axis=1)
-                self.stacked_global_state = np.roll(self.stacked_global_state, 1, axis=1)
-
-                self.stacked_local_obs[:, -1, :] = np.array(local_obs).copy()
-                self.stacked_global_state[:, -1, :] = np.array(global_state).copy()
-
-                local_obs = self.stacked_local_obs.reshape(self.n_agents, -1)
-                global_state = self.stacked_global_state.reshape(self.n_agents, -1)
-
-            return local_obs, global_state, [0] * self.n_agents, dones, infos, available_actions
+        except (protocol.ProtocolError, protocol.ConnectionError) as exc:
+            # SC2 may have applied the action before disconnecting. The whole
+            # episode must be retried; stale observations are not a terminal step.
+            raise SC2EpisodeInterrupted("SC2 connection lost during step") from exc
 
         self._total_steps += 1
         self._episode_steps += 1
@@ -2412,13 +2351,9 @@ class SMACv2EnvCore:
             self._init_ally_unit_types(0)
             self._create_new_team(ally_team, episode_config, ally=True)
             self._create_new_team(enemy_team, episode_config, ally=False)
-            try:
-                self._controller.step(1)
-                self._obs = self._controller.observe()
-            except (protocol.ProtocolError, protocol.ConnectionError):
-                self.full_restart()
-                self.reset(self._seed, episode_config=episode_config)
-        while True:
+            self._controller.step(1)
+            self._obs = self._controller.observe()
+        for _ in range(200):
             # Sometimes not all units have yet been created by SC2
             self.agents = {}
             self.enemies = {}
@@ -2463,12 +2398,12 @@ class SMACv2EnvCore:
             if all_agents_created and all_enemies_created:  # all good
                 return
 
-            try:
-                self._controller.step(1)
-                self._obs = self._controller.observe()
-            except (protocol.ProtocolError, protocol.ConnectionError):
-                self.full_restart()
-                self.reset(self._seed, episode_config=episode_config)
+            self._controller.step(1)
+            self._obs = self._controller.observe()
+        raise SC2EpisodeInterrupted(
+            f"SC2 did not create all units: allies={len(self.agents)}/{self.n_agents}, "
+            f"enemies={len(self.enemies)}/{self.n_enemies}"
+        )
 
     def get_unit_types(self):
         if self._unit_types is None:

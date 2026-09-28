@@ -65,8 +65,15 @@ class ParallelEnv(co_mas.env.ParallelEnv):
 
         self._env = SMACv2Env(f"10gen_{_map_type}", capability_config=_capability_config, smacv2_env_args=smacv2_env_args)
         # NOTE: To obtain agent infos, should be reset again.
-        self._env.reset(0)
-        self._init_agents()
+        try:
+            self._env.reset(0)
+            self._init_agents()
+        except Exception:
+            try:
+                self._env.close()
+            except Exception:
+                logger.exception("Failed to close SC2 after environment initialization failed")
+            raise
 
         self.observation_spaces = gym.spaces.Dict(
             {
